@@ -155,7 +155,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, onMounted } from 'vue'
-import { Graph, Edge, EdgeView } from '@antv/x6'
+import { Graph, EdgeView } from '@antv/x6'
 import { Dnd } from '@antv/x6-plugin-dnd' // 外部拖入
 import { Transform } from '@antv/x6-plugin-transform' // 图形变换
 import { Snapline } from '@antv/x6-plugin-snapline' // 对齐线
