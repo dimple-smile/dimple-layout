@@ -335,16 +335,16 @@ const toJSON = () => {
     ...defaultOptions.background,
     image: backgroundImage.value,
   }
-  // const data = JSON.stringify(jsonData)
-  // const blob = new Blob([data], { type: 'application/json' })
-  // const url = URL.createObjectURL(blob)
+  const data = JSON.stringify(jsonData)
+  const blob = new Blob([data], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
 
-  // const link = document.createElement('a')
-  // link.href = url
-  // link.download = 'data.json'
-  // link.click()
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'data.json'
+  link.click()
 
-  // URL.revokeObjectURL(url)
+  URL.revokeObjectURL(url)
 }
 </script>
 
