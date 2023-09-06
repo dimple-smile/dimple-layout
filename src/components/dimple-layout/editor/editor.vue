@@ -416,26 +416,24 @@ const drawEdge = () => {
 }
 
 const links = shallowRef<any[]>([])
-function calculateDistance(p1, p2) {
+function calculateDistance(p1: any, p2: any) {
   const { x: x1, y: y1 } = p1
   const { x: x2, y: y2 } = p2
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
 }
 const link = () => {
-  const rect = container.value?.getBoundingClientRect() || {}
+  const rect: any = container.value?.getBoundingClientRect() || {}
   const { height } = rect
-  const edgePaths =
+  const edgePaths: any[] =
     graph.value
       ?.getEdges()
       .filter((item) => item.data?.isDrawEdge)
       .map((item) => graph.value?.findViewByCell(item)?.container.children[0].getAttribute('d')) || []
-  console.log(edgePaths)
-
   const endNodes = graph.value?.getNodes().filter((item) => item.data?.type === 'end') || []
   for (const item of endNodes) {
     let { x, y } = item.getPosition()
     x = x + 10
-    const checkEdge = graph.value?.addEdge({
+    const checkEdge: any = graph.value?.addEdge({
       source: { x, y: 0 },
       target: { x, y: height },
       attrs: {
@@ -445,7 +443,7 @@ const link = () => {
       },
     })
     setTimeout(() => {
-      const checkPath = graph.value?.findViewByCell(checkEdge)?.container.children[0].getAttribute('d')
+      const checkPath: any = graph.value?.findViewByCell(checkEdge)?.container.children[0].getAttribute('d')
       let intersections = []
       for (const pathItem of edgePaths) {
         const intersection = intersect(checkPath, pathItem)
