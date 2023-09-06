@@ -20,6 +20,7 @@
     "@antv/x6-plugin-selection": "^2.1.7",
     "@antv/x6-plugin-snapline": "^2.1.7",
     "@antv/x6-plugin-transform": "^2.1.7",
+    "path-intersection": "^2.2.1",
     "vue": "^3.3.4"
   },
   "devDependencies": {

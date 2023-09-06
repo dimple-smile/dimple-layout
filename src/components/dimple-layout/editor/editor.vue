@@ -13,6 +13,14 @@
             </svg>
           </div>
 
+          <!-- 导入 -->
+          <div class="dimple-layout-editor-toolbar-item">
+            <div class="custom-file-upload">
+              <input type="file" id="file-upload" accept="json" class="file-input" @change="uploadJson" />
+              <label for="file-upload" class="file-upload-btn"> 导入 </label>
+            </div>
+          </div>
+
           <!-- undo -->
           <div class="dimple-layout-editor-toolbar-item" @click="undo">
             <svg
@@ -52,25 +60,40 @@
           </div>
 
           <!-- 矩形 -->
-          <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'rect')">
+          <!-- <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'rect')">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
               <rect width="20" height="12" x="2" y="6" fill="none" stroke="#000000" stroke-width="2" />
             </svg>
-          </div>
+          </div> -->
 
           <!-- 圆形 -->
-          <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'circle')">
+          <!-- <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'circle')">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="11" fill="none" stroke="#000000" stroke-width="2" />
             </svg>
-          </div>
+          </div> -->
+
+          <!-- 起点 -->
+          <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'start')">起点</div>
 
           <!-- 路径 -->
-          <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'polyline')">
+          <div class="dimple-layout-editor-toolbar-item" @mousedown="drawEdge">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
               <path d="M0,12 C8,0 16,24 24,12" fill="none" stroke="#000000" stroke-width="2" />
             </svg>
+            <div style="margin-left: 5px">
+              {{ onDragEdgeIndex >= 0 ? '正在绘制' : '绘制路径' }}
+            </div>
           </div>
+
+          <!-- 终点 -->
+          <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'end')">终点</div>
+
+          <!-- 途经点 -->
+          <!-- <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'vertice')">途经点</div> -->
+
+          <!-- 生成路线 -->
+          <div class="dimple-layout-editor-toolbar-item" @mousedown="link">生成路线</div>
 
           <!-- 路障 -->
           <div class="dimple-layout-editor-toolbar-item" @mousedown="drag($event, 'rect')">
@@ -155,7 +178,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, onMounted } from 'vue'
-import { Graph, EdgeView } from '@antv/x6'
+import { Graph, EdgeView, Node, Edge } from '@antv/x6'
 import { Dnd } from '@antv/x6-plugin-dnd' // 外部拖入
 import { Transform } from '@antv/x6-plugin-transform' // 图形变换
 import { Snapline } from '@antv/x6-plugin-snapline' // 对齐线
@@ -165,11 +188,19 @@ import { History } from '@antv/x6-plugin-history' // 撤销重做
 import { Selection } from '@antv/x6-plugin-selection' // 框选
 import { Scroller } from '@antv/x6-plugin-scroller' // 滚动画布
 
+import intersect from 'path-intersection' // 计算path交点
+
 const container = ref<HTMLDivElement | null>(null)
 const dragContainer = ref<HTMLDivElement | null>(null)
 const graph = shallowRef<Graph | null>(null)
 const dnd = shallowRef<Dnd | null>(null)
 const edges = shallowRef<any[]>([])
+const startNodes = shallowRef<any[]>([])
+const vertices = shallowRef<any[]>([])
+const endNodes = shallowRef<any[]>([])
+const onDragEdgeIndex = ref(-1)
+const drawEdgeData = shallowRef<any[]>([])
+
 const zoom = ref(1)
 
 const defaultOptions = {
@@ -241,6 +272,9 @@ onMounted(() => {
   graph.value?.bindKey('ctrl+v', paste)
   graph.value?.bindKey('command+v', paste)
 
+  graph.value?.bindKey('ctrl+z', undo)
+  graph.value?.bindKey('command+z', undo)
+
   const remove = () => {
     const cells = graph.value?.getSelectedCells() || []
     if (cells.length) graph.value?.removeCells(cells)
@@ -271,28 +305,94 @@ onMounted(() => {
   graph.value.on('scale', (e) => {
     zoom.value = e.sx
   })
+
+  graph.value.on('blank:click', (e) => {
+    if (onDragEdgeIndex.value < 0) return
+    const { x, y } = e
+
+    if (!drawEdgeData.value[onDragEdgeIndex.value]) drawEdgeData.value[onDragEdgeIndex.value] = { time: 0 }
+    const item = drawEdgeData.value[onDragEdgeIndex.value]
+    if (item.time === 0) {
+      item.source = graph.value?.addNode({ shape: 'circle', width: 10, height: 10, x, y, data: { isDrawEdgeSource: true, index: onDragEdgeIndex.value } })
+    }
+
+    if (item.time === 1) {
+      item.target = graph.value?.addNode({ shape: 'circle', width: 10, height: 10, x, y, data: { isDrawEdgeTarget: true, index: onDragEdgeIndex.value } })
+      const { source, target } = item
+      const edge = graph.value?.addEdge({ source, target, tools: ['vertices', 'segments'], data: { isDrawEdge: true, index: onDragEdgeIndex.value } })
+      edges.value.push(edge)
+      item.edge = edge
+    }
+
+    if (item.edge && item.time > 1) {
+      const edge: Edge = item.edge
+      const node: Node = item.target
+      const vertices = edge.getVertices() || []
+      vertices.push(node.getPosition())
+      node.setPosition({ x, y })
+      edge.setVertices(vertices)
+    }
+    item.time++
+    drawEdgeData.value[onDragEdgeIndex.value] = item
+  })
 })
 
-const drag = (event: any, shape: 'rect' | 'polyline' | 'circle') => {
+const drag = (event: any, shape: 'rect' | 'circle' | 'start' | 'end' | 'edge' | 'vertice') => {
   const options = { shape, width: 100, height: 40, attrs: {} }
-  if (shape === 'polyline') {
-    const key = +new Date()
-    const node = graph.value?.createNode({ shape: 'rect', width: 100, height: 1, data: { key } })
+
+  if (shape === 'start' || shape === 'end') {
+    const key = shape + new Date().getTime()
+    const node = graph.value?.createNode({
+      shape: 'circle',
+      width: 20,
+      height: 20,
+      attrs: {
+        body: {
+          stroke: shape === 'start' ? 'green' : 'red', // 边框颜色
+        },
+      },
+      data: { type: shape, key },
+    })
+
     dnd.value?.start(node!, event)
+
     graph.value?.on('node:added', ({ node }) => {
       if (node.data?.key === key) {
-        const { x, y } = node.position()
-        node.remove()
-        const source = graph.value?.addNode({ shape: 'circle', width: 10, height: 10, x, y, data: { isEdgeNode: true } })
-        const target = graph.value?.addNode({ shape: 'circle', width: 10, height: 10, x: x + 100, y, data: { isEdgeNode: true } })
-        const edge = graph.value?.addEdge({ source, target, router: 'manhattan', tools: ['vertices', 'segments'] })
-        edges.value.push(edge)
+        if (node.data?.type === 'start') startNodes.value.push(node)
+        if (node.data?.type === 'end') endNodes.value.push(node)
       }
     })
-  } else {
-    const node = graph.value?.createNode(options)
-    dnd.value?.start(node!, event)
+    return
   }
+
+  if (shape === 'vertice') {
+    const key = shape + new Date().getTime()
+    const node = graph.value?.createNode({
+      shape: 'circle',
+      width: 10,
+      height: 10,
+      attrs: {
+        body: {
+          stroke: 'blue', // 边框颜色
+        },
+      },
+      data: { type: shape, key },
+    })
+
+    dnd.value?.start(node!, event)
+
+    graph.value?.on('node:added', ({ node }) => {
+      if (node.data?.key === key) {
+        console.log(node.getPosition())
+        const { x, y } = node.getPosition()
+        vertices.value.push({ x: x + 5, y: y + 5 })
+      }
+    })
+    return
+  }
+
+  const node = graph.value?.createNode(options)
+  dnd.value?.start(node!, event)
 }
 
 const undo = () => {
@@ -301,6 +401,66 @@ const undo = () => {
 
 const redo = () => {
   graph.value?.redo()
+}
+
+const drawEdge = () => {
+  if (onDragEdgeIndex.value >= 0) {
+    const dragEdgeDataItem = drawEdgeData.value[onDragEdgeIndex.value]
+    if (!(dragEdgeDataItem.source && dragEdgeDataItem.target && dragEdgeDataItem.edge)) {
+      drawEdgeData.value.splice(onDragEdgeIndex.value, 1)
+    }
+    onDragEdgeIndex.value = -1
+    return
+  }
+  onDragEdgeIndex.value = drawEdgeData.value.length
+}
+
+const links = shallowRef<any[]>([])
+function calculateDistance(p1, p2) {
+  const { x: x1, y: y1 } = p1
+  const { x: x2, y: y2 } = p2
+  return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
+}
+const link = () => {
+  const rect = container.value?.getBoundingClientRect() || {}
+  const { height } = rect
+  const edgePaths =
+    graph.value
+      ?.getEdges()
+      .filter((item) => item.data?.isDrawEdge)
+      .map((item) => graph.value?.findViewByCell(item)?.container.children[0].getAttribute('d')) || []
+  console.log(edgePaths)
+
+  const endNodes = graph.value?.getNodes().filter((item) => item.data?.type === 'end') || []
+  for (const item of endNodes) {
+    let { x, y } = item.getPosition()
+    x = x + 10
+    const checkEdge = graph.value?.addEdge({
+      source: { x, y: 0 },
+      target: { x, y: height },
+      attrs: {
+        line: {
+          stroke: 'rgba(0,0,0,0)', // 边框颜色
+        },
+      },
+    })
+    setTimeout(() => {
+      const checkPath = graph.value?.findViewByCell(checkEdge)?.container.children[0].getAttribute('d')
+      let intersections = []
+      for (const pathItem of edgePaths) {
+        const intersection = intersect(checkPath, pathItem)
+        if (intersection.length === 0) continue
+        intersections.push(...intersection)
+      }
+      const distanceArr = intersections.map((item) => calculateDistance({ x, y }, item))
+      const index = distanceArr.indexOf(Math.min(...distanceArr))
+      const intersection = intersections[index]
+      if (intersection) {
+        const { x, y } = intersection
+        graph.value?.addEdge({ source: { x, y }, target: item })
+      }
+    }, 300)
+  }
 }
 
 const center = () => {
@@ -316,12 +476,33 @@ const fileUpload = (e: any) => {
   const reader = new FileReader()
   reader.onload = (event: any) => {
     backgroundImage.value = event?.target?.result
+    // const rect = container.value?.getBoundingClientRect() || {}
+    // graph.value?.addNode({
+    //   shape: 'image',
+    //   x: 0,
+    //   y: 0,
+    //   width: rect.width,
+    //   height: rect.height,
+    //   imageUrl: backgroundImage.value,
+    //   zIndex: -1,
+    // })
+
     graph.value?.drawBackground({
       image: backgroundImage.value,
     })
     graph.value?.updateBackground()
   }
   reader.readAsDataURL(file)
+}
+
+const uploadJson = (e: any) => {
+  const file = e.target.files[0]
+  const reader = new FileReader()
+  reader.onload = (event: any) => {
+    const jsonData = JSON.parse(event?.target?.result)
+    graph.value?.fromJSON(jsonData)
+  }
+  reader.readAsText(file)
 }
 
 const clear = () => {
@@ -373,6 +554,8 @@ const toJSON = () => {
   font-size: 12px;
   /* cursor: move; */
   margin-right: 10px;
+  display: flex;
+  align-items: center;
 }
 
 .custom-file-upload {
