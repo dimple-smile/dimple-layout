@@ -252,7 +252,6 @@ onMounted(() => {
   // 图形变换
   graph.value.use(
     new Transform({
-      autoScroll: false,
       resizing: {
         enabled: (node: Node) => {
           const data = node.getData() || {}
@@ -506,7 +505,7 @@ const link = async () => {
       return coordinates
     }
 
-    function isPointOnLine(point, lineStart, lineEnd) {
+    function isPointOnLine(point: any, lineStart: any, lineEnd: any) {
       const k1 = (point.y - lineStart.y) / (point.x - lineStart.x)
       const k2 = (point.y - lineEnd.y) / (point.x - lineEnd.x)
       const res = Number(Math.abs(k1 - k2).toFixed(3))
