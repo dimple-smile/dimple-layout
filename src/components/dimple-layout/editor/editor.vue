@@ -388,12 +388,19 @@ const drag = (event: any, shape: 'rect' | 'circle' | 'start' | 'end' | 'edge' | 
   if (shape === 'start' || shape === 'end') {
     const key = shape + new Date().getTime()
     const node = graph.value?.createNode({
-      shape: 'circle',
-      width: 20,
-      height: 20,
+      shape: 'image',
+      width: 50,
+      height: 50,
+      imageUrl: 'https://gw.alipayobjects.com/os/s/prod/antv/assets/image/logo-with-text-73b8a.svg',
+      label: shape === 'start' ? '起点' : '终点',
       attrs: {
-        body: {
-          stroke: shape === 'start' ? 'green' : 'red', // 边框颜色
+        label: {
+          fontSize: 12,
+          refX: 0.5,
+          refY: '100%',
+          refY2: 4,
+          textAnchor: 'middle',
+          textVerticalAnchor: 'top',
         },
       },
       data: { type: shape, key },
