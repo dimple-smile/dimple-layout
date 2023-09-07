@@ -16,8 +16,8 @@
           <!-- 导入 -->
           <div class="dimple-layout-editor-toolbar-item">
             <div class="custom-file-upload">
-              <input type="file" id="file-upload" accept="json" class="file-input" @change="uploadJson" />
-              <label for="file-upload" class="file-upload-btn"> 导入 </label>
+              <input type="file" id="file-upload-1" accept="json" class="file-input" @change="uploadJson" />
+              <label for="file-upload-1" class="file-upload-btn"> 导入 </label>
             </div>
           </div>
 
@@ -178,7 +178,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, onMounted } from 'vue'
-import { Graph, EdgeView, Node, Edge } from '@antv/x6'
+import { Graph, EdgeView, Node, Edge, CellView } from '@antv/x6'
 import { Dnd } from '@antv/x6-plugin-dnd' // 外部拖入
 import { Transform } from '@antv/x6-plugin-transform' // 图形变换
 import { Snapline } from '@antv/x6-plugin-snapline' // 对齐线
@@ -209,6 +209,7 @@ const defaultOptions = {
   scaling: { min: 0.25, max: 10 },
   panning: false, // 平移
   background: { color: '#F2F7FA' },
+  translating: { restrict: true },
   grid: {
     visible: true,
     type: 'doubleMesh',
@@ -236,13 +237,31 @@ const updateEdges = (node: any) => {
 
 onMounted(() => {
   if (!container.value) return
-  graph.value = new Graph({ ...defaultOptions, container: container.value })
+  graph.value = new Graph({
+    ...defaultOptions,
+    container: container.value,
+    connecting: {
+      snap: true,
+      edgeAnchor: 'closest',
+    },
+  })
 
   // 外部拖入
   dnd.value = new Dnd({ target: graph.value })
 
   // 图形变换
-  graph.value.use(new Transform({ resizing: { enabled: true }, rotating: { enabled: true } }))
+  graph.value.use(
+    new Transform({
+      autoScroll: false,
+      resizing: {
+        enabled: (node: Node) => {
+          const data = node.getData() || {}
+          if (data.isDrawEdgeSource || data.isDrawEdgeTarget) return
+          return true
+        },
+      },
+    }),
+  )
 
   // 对齐线
   graph.value.use(new Snapline({ enabled: true }))
@@ -287,7 +306,16 @@ onMounted(() => {
   graph.value.use(new History({ enabled: true }))
 
   // 框选
-  graph.value.use(new Selection({ enabled: true, multiple: true, rubberband: true, movable: true, showNodeSelectionBox: true, modifiers: ['ctrl', 'alt', 'meta'] }))
+  graph.value.use(
+    new Selection({
+      enabled: true,
+      multiple: true,
+      rubberband: true,
+      movable: true,
+      showNodeSelectionBox: true,
+      modifiers: ['ctrl', 'alt', 'meta'],
+    }),
+  )
 
   // 滚动画布
   graph.value.use(new Scroller({ enabled: true, pannable: true, autoResize: false, pageVisible: true, pageBreak: true }))
@@ -313,13 +341,31 @@ onMounted(() => {
     if (!drawEdgeData.value[onDragEdgeIndex.value]) drawEdgeData.value[onDragEdgeIndex.value] = { time: 0 }
     const item = drawEdgeData.value[onDragEdgeIndex.value]
     if (item.time === 0) {
-      item.source = graph.value?.addNode({ shape: 'circle', width: 10, height: 10, x, y, data: { isDrawEdgeSource: true, index: onDragEdgeIndex.value } })
+      item.source = graph.value?.addNode({
+        shape: 'circle',
+        width: 10,
+        height: 10,
+        x,
+        y,
+        data: { isDrawEdgeSource: true, index: onDragEdgeIndex.value },
+      })
     }
 
     if (item.time === 1) {
       item.target = graph.value?.addNode({ shape: 'circle', width: 10, height: 10, x, y, data: { isDrawEdgeTarget: true, index: onDragEdgeIndex.value } })
       const { source, target } = item
-      const edge = graph.value?.addEdge({ source, target, tools: ['vertices', 'segments'], data: { isDrawEdge: true, index: onDragEdgeIndex.value } })
+      const edge = graph.value?.addEdge({
+        source,
+        target,
+        attrs: {
+          line: {
+            sourceMarker: false,
+            targetMarker: false,
+          },
+        },
+        tools: ['vertices', 'segments'],
+        data: { isDrawEdge: true, index: onDragEdgeIndex.value },
+      })
       edges.value.push(edge)
       item.edge = edge
     }
@@ -365,32 +411,6 @@ const drag = (event: any, shape: 'rect' | 'circle' | 'start' | 'end' | 'edge' | 
     return
   }
 
-  if (shape === 'vertice') {
-    const key = shape + new Date().getTime()
-    const node = graph.value?.createNode({
-      shape: 'circle',
-      width: 10,
-      height: 10,
-      attrs: {
-        body: {
-          stroke: 'blue', // 边框颜色
-        },
-      },
-      data: { type: shape, key },
-    })
-
-    dnd.value?.start(node!, event)
-
-    graph.value?.on('node:added', ({ node }) => {
-      if (node.data?.key === key) {
-        console.log(node.getPosition())
-        const { x, y } = node.getPosition()
-        vertices.value.push({ x: x + 5, y: y + 5 })
-      }
-    })
-    return
-  }
-
   const node = graph.value?.createNode(options)
   dnd.value?.start(node!, event)
 }
@@ -421,29 +441,138 @@ function calculateDistance(p1: any, p2: any) {
   const { x: x2, y: y2 } = p2
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
 }
-const link = () => {
+
+const getEdgeSvg = async (edge: Edge): Promise<Element> => {
+  return await new Promise((resolve) => {
+    const sti = setInterval(() => {
+      if (!graph.value?.findViewByCell(edge)) return
+      const svgElement = graph.value?.findViewByCell(edge)?.container as any
+      resolve(svgElement)
+      clearInterval(sti)
+    }, 50)
+  })
+}
+
+const getEdgePath = async (edge: Edge): Promise<string> => {
+  const svg = await getEdgeSvg(edge)
+  return svg.children[1].getAttribute('d') || ''
+}
+
+const getEdgePathStartPoint = async (edge: Edge): Promise<{ x: number; y: number }> => {
+  const pathString = await getEdgePath(edge)
+  const startPoint = pathString.match(/M\s*([\d.]+)\s*([\d.]+)/i)
+  if (startPoint && startPoint.length === 3) {
+    const x = parseFloat(startPoint[1])
+    const y = parseFloat(startPoint[2])
+    return { x, y }
+  }
+  return { x: 0, y: 0 }
+}
+
+const link = async () => {
+  const a: Edge[] = graph.value?.getEdges() || []
+
+  const nodes = graph.value?.getNodes().filter((item) => item.data?.type === 'end') || []
+
+  for (const item of nodes) {
+    const edge = graph.value?.addEdge({
+      source: { cell: a[0].id },
+      target: item,
+      attrs: {
+        line: {
+          sourceMarker: false,
+          targetMarker: false,
+        },
+      },
+      router: {
+        name: 'manhattan',
+        args: {
+          step: 1,
+        },
+      },
+    })
+    function getPathPoints(path: any) {
+      var regex = /[ML]\s*([\d.-]+)\s*,?\s*([\d.-]+)?/g
+      var matches
+      var coordinates = []
+
+      while ((matches = regex.exec(path)) !== null) {
+        var x = parseFloat(matches[1])
+        var y = parseFloat(matches[2])
+
+        coordinates.push({ x: x, y: y })
+      }
+
+      return coordinates
+    }
+
+    function isPointOnLine(point, lineStart, lineEnd) {
+      const k1 = (point.y - lineStart.y) / (point.x - lineStart.x)
+      const k2 = (point.y - lineEnd.y) / (point.x - lineEnd.x)
+      const res = Number(Math.abs(k1 - k2).toFixed(3))
+      return res === 0
+    }
+    function generateNewPath(path: any, targetPoint: any) {
+      const newPathPoints = getPathPoints(path)
+      let res = ``
+      for (let i = 0; i < newPathPoints.length; i++) {
+        const item = newPathPoints[i]
+        const next = newPathPoints[i + 1]
+        if (!next) break
+        if (isPointOnLine(targetPoint, item, next)) {
+          console.log(i)
+          res += `${res ? 'L' : 'M'} ${item.x} ${item.y}`
+          res += `M ${targetPoint.x} ${targetPoint.y}`
+          break
+        } else {
+          res += `${res ? 'L' : 'M'} ${item.x} ${item.y}`
+        }
+      }
+
+      return res
+    }
+
+    const point = await getEdgePathStartPoint(edge!)
+    const edgePath = await getEdgePath(edge!)
+    const edgePoints = getPathPoints(edgePath)
+
+    const newPath = generateNewPath(await getEdgePath(a[0]), point)
+    console.log(newPath)
+    let newPathPoints = getPathPoints(newPath)
+    newPathPoints = newPathPoints.concat(edgePoints)
+    graph.value?.addEdge({
+      source: newPathPoints[0],
+      target: newPathPoints[newPathPoints.length - 1],
+      vertices: newPathPoints,
+      attrs: {
+        line: {
+          stroke: '#FFA500',
+          strokeWidth: 2,
+          sourceMarker: false,
+          targetMarker: false,
+        },
+      },
+    })
+  }
+
+  return
   const rect: any = container.value?.getBoundingClientRect() || {}
-  const { height } = rect
+  const { height, width } = rect
   const edgePaths: any[] =
     graph.value
       ?.getEdges()
       .filter((item) => item.data?.isDrawEdge)
       .map((item) => graph.value?.findViewByCell(item)?.container.children[0].getAttribute('d')) || []
-  const endNodes = graph.value?.getNodes().filter((item) => item.data?.type === 'end') || []
+  const endNodes: Node[] = graph.value?.getNodes().filter((item) => item.data?.type === 'end') || []
+
   for (const item of endNodes) {
     let { x, y } = item.getPosition()
-    x = x + 10
-    const checkEdge: any = graph.value?.addEdge({
-      source: { x, y: 0 },
-      target: { x, y: height },
-      attrs: {
-        line: {
-          stroke: 'rgba(0,0,0,0)', // 边框颜色
-        },
-      },
-    })
-    setTimeout(() => {
-      const checkPath: any = graph.value?.findViewByCell(checkEdge)?.container.children[0].getAttribute('d')
+    console.log(item.size())
+    x = x + item.size().width / 2
+    y = y + item.size().height / 2
+    const portraitPath = `M ${x} 0 L ${x} ${height}`
+    const horizontalPath = `M 0 ${y} L ${width} ${y}`
+    const getIntersection = (checkPath: any) => {
       let intersections = []
       for (const pathItem of edgePaths) {
         const intersection = intersect(checkPath, pathItem)
@@ -453,11 +582,31 @@ const link = () => {
       const distanceArr = intersections.map((item) => calculateDistance({ x, y }, item))
       const index = distanceArr.indexOf(Math.min(...distanceArr))
       const intersection = intersections[index]
-      if (intersection) {
-        const { x, y } = intersection
-        graph.value?.addEdge({ source: { x, y }, target: item })
-      }
-    }, 300)
+      return intersection
+    }
+
+    let intersection: any = getIntersection(portraitPath)
+    if (!intersection) intersection = getIntersection(horizontalPath)
+    if (!intersection) {
+      // const maxDistance = 300
+      // for (let index = 50; index < maxDistance; index += 50) {
+      //   let nodes: any[] = graph.value?.getNodesInArea({ ...item.getPosition(), w: 300, h: 300 }) || []
+      //   if (nodes?.length === 0) continue
+      //   const distanceArr = nodes?.map((item) => calculateDistance({ x, y }, item.getPosition())) || []
+      //   const minIndex = distanceArr.indexOf(Math.min(...distanceArr))
+      //   const node = nodes[minIndex]
+      //   intersection = {
+      //     x: node.getPosition().x - node.size().width / 2,
+      //     y: node.getPosition().y - node.size().height / 2,
+      //   }
+      //   console.log(nodes);
+      //   if (nodes.length >= 2) break
+      // }
+    }
+    if (intersection) {
+      const { x, y } = intersection
+      graph.value?.addEdge({ source: { x, y }, target: item })
+    }
   }
 }
 
@@ -474,17 +623,6 @@ const fileUpload = (e: any) => {
   const reader = new FileReader()
   reader.onload = (event: any) => {
     backgroundImage.value = event?.target?.result
-    // const rect = container.value?.getBoundingClientRect() || {}
-    // graph.value?.addNode({
-    //   shape: 'image',
-    //   x: 0,
-    //   y: 0,
-    //   width: rect.width,
-    //   height: rect.height,
-    //   imageUrl: backgroundImage.value,
-    //   zIndex: -1,
-    // })
-
     graph.value?.drawBackground({
       image: backgroundImage.value,
     })
@@ -510,10 +648,6 @@ const clear = () => {
 
 const toJSON = () => {
   const jsonData: any = graph.value?.toJSON() || {}
-  jsonData.background = {
-    ...defaultOptions.background,
-    image: backgroundImage.value,
-  }
   const data = JSON.stringify(jsonData)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -563,8 +697,5 @@ const toJSON = () => {
 
 .file-input {
   display: none;
-}
-
-.file-upload-btn {
 }
 </style>
