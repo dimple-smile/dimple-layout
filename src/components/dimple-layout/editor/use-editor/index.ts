@@ -2,8 +2,6 @@ import { ref, watch, onMounted, shallowRef, h, render, computed } from 'vue'
 import { Graph, EdgeView, Node, Edge, CellView } from '@antv/x6'
 import mergeWith from 'lodash-es/mergeWith'
 
-import ToolItem from './tool-item.vue'
-
 import { buildInTools } from '../tools'
 import { buildInPlugins } from '../plugins'
 
