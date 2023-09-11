@@ -20,10 +20,11 @@
     "@antv/x6-plugin-selection": "^2.1.7",
     "@antv/x6-plugin-snapline": "^2.1.7",
     "@antv/x6-plugin-transform": "^2.1.7",
-    "path-intersection": "^2.2.1",
+    "lodash-es": "^4.17.21",
     "vue": "^3.3.4"
   },
   "devDependencies": {
+    "@types/lodash-es": "^4.17.9",
     "@vitejs/plugin-vue": "^4.3.4",
     "typescript": "^5.2.2",
     "vite": "^4.4.9",

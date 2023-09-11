@@ -1,4 +1,2 @@
-export { useEditor as useDimpleLayoutEditor, Editor as DimpleLayoutEditor } from './editor'
-export { useRender as useDimpleLayoutRender, Render as DimpleLayoutRender } from './render'
-
-
+export { DimpleLayoutEditor, getDimpleLayoutEditorRef } from './editor'
+export { DimpleLayoutRender } from './render'

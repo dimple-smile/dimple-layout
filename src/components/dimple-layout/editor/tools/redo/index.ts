@@ -1,11 +1,10 @@
 import icon from './icon.svg'
-
 import type { DimpleLayoutEditorTool, DimpleLayoutCanvas } from '../../type'
 
 export default {
-  key: 'undo',
-  name: '回退',
+  key: 'redo',
+  name: '重做',
   // icon,
-  on: { click: (_, canvas) => canvas.undo() },
-  index: 1,
+  on: { click: (_, canvas) => canvas.redo() },
+  index: 2,
 } as DimpleLayoutEditorTool

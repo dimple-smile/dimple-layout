@@ -1,2 +1,5 @@
-export { default as Editor } from './editor.vue'
-export { useEditor } from './use-editor'
+import { ref } from 'vue'
+import { default as DimpleLayoutEditor } from './editor.vue'
+const getDimpleLayoutEditorRef = () => ref<InstanceType<typeof DimpleLayoutEditor> | null>(null)
+
+export { DimpleLayoutEditor, getDimpleLayoutEditorRef }
